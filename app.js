@@ -1,4 +1,4 @@
-﻿const candidates=[
+const candidates=[
  {name:'周子涵',role:'产品实习生 · 上海',initial:'周',score:92,status:'强匹配',tone:'green',school:'复旦大学 · 信息管理',skills:'SQL  ·  用户研究  ·  B端产品'},
  {name:'陈思远',role:'产品经理 · 北京',initial:'陈',score:86,status:'待复核',tone:'amber',school:'浙江大学 · 工业设计',skills:'Axure  ·  数据分析  ·  项目管理'},
  {name:'林嘉怡',role:'运营实习生 · 深圳',initial:'林',score:78,status:'待复核',tone:'amber',school:'中山大学 · 新闻传播',skills:'内容运营  ·  社群增长  ·  Excel'}
@@ -17,3 +17,12 @@ function bindActions(){[['parseBtn','JD 解析完成，已更新筛选标准'],[
 function toast(text){const el=document.getElementById('toast');el.textContent=text;el.classList.add('show');clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>el.classList.remove('show'),2200)}
 document.querySelectorAll('.nav-item').forEach(btn=>btn.onclick=()=>render(btn.dataset.view));render();
 
+
+function bindActions(){
+ const parse=document.getElementById('parseBtn');
+ if(parse) parse.onclick=async()=>{const jd=document.getElementById('jdText').value.trim();if(!jd)return toast('请先填写 JD');parse.disabled=true;toast('正在解析 JD...');try{const r=await fetch('/api/jd/parse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jd})});const d=await r.json();if(!r.ok)throw Error(d.error);document.querySelector('.requirement-list').innerHTML=d.requirements.map(x=>`<div>${x.name} <span>${x.value} · ${x.hard?'硬性':'加分'}</span></div>`).join('');toast('JD 解析完成：'+d.requirements.length+' 项要求')}catch(e){toast('JD 解析失败：'+e.message)}finally{parse.disabled=false}};
+ const generate=document.getElementById('generateBtn');
+ if(generate) generate.onclick=async()=>{generate.disabled=true;toast('正在生成面试题...');try{const r=await fetch('/api/interview/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jd:'产品实习生，要求用户研究、数据分析、SQL 与产品思维'})});const d=await r.json();if(!r.ok)throw Error(d.error);const box=document.querySelector('.section-panel');box.querySelectorAll('.question').forEach(x=>x.remove());box.insertAdjacentHTML('beforeend',d.questions.map(q=>`<div class="question"><label>${q.dimension}</label><strong>${q.question}</strong><p><b>STAR 追问：</b>${q.followups.join('')}</p></div>`).join(''));toast('已生成 '+d.questions.length+' 道 STAR 追问题')}catch(e){toast('生成失败：'+e.message)}finally{generate.disabled=false}};
+ const save=document.getElementById('saveReview');if(save)save.onclick=()=>toast('面试评价已保存')
+}
+render();
