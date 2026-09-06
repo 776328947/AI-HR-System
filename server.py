@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
   if path=='/api/health':return reply(self,{'ok':True,'service':'AI-HR-System'})
   p=ROOT/('index.html' if path=='/' else path.lstrip('/'))
   if p.is_file() and ROOT in p.resolve().parents:
-   b=p.read_bytes(); self.send_response(200); self.send_header('Content-Type','text/html; charset=utf-8' if p.suffix=='.html' else 'text/plain; charset=utf-8'); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b); return
+   b=p.read_bytes(); self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8' if p.suffix=='.html' else ('application/javascript; charset=utf-8' if p.suffix=='.js' else 'text/css; charset=utf-8')); self.send_header('Content-Length',str(len(b))); self.end_headers(); self.wfile.write(b); return
   self.send_error(404)
  def do_POST(self):
   if urlparse(self.path).path!='/api/resumes/upload':return reply(self,{'error':'Not found'},404)
@@ -46,3 +46,4 @@ class Handler(BaseHTTPRequestHandler):
    return reply(self,{'count':len(out),'candidates':out})
   except Exception as e:return reply(self,{'error':str(e)},400)
 if __name__=='__main__':ThreadingHTTPServer(('127.0.0.1',8787),Handler).serve_forever()
+
