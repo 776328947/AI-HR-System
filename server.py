@@ -1,7 +1,6 @@
-﻿from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
-import cgi
 import json
 import re
 import shutil
@@ -26,6 +25,28 @@ def extract_text(path):
         tables = "\n".join(" ".join(cell.text for cell in row.cells) for table in doc.tables for row in table.rows)
         return paragraphs + "\n" + tables
     raise ValueError("Unsupported file type")
+
+
+def parse_multipart(handler):
+    content_type = handler.headers.get("Content-Type", "")
+    match = re.search(r"boundary=([^;]+)", content_type)
+    if not match:
+        raise ValueError("Missing multipart boundary")
+    boundary = match.group(1).strip().strip('"').encode("utf-8")
+    length = int(handler.headers.get("Content-Length", "0"))
+    body = handler.rfile.read(length)
+    fields = []
+    for part in body.split(b"--" + boundary):
+        part = part.strip(b"\r\n-")
+        if not part or b"\r\n\r\n" not in part:
+            continue
+        raw_headers, content = part.split(b"\r\n\r\n", 1)
+        headers = raw_headers.decode("utf-8", errors="ignore")
+        disposition = re.search(r'Content-Disposition:.*?name="([^"]+)"(?:;\s*filename="([^"]*)")?', headers, re.I)
+        if not disposition:
+            continue
+        fields.append({"name": disposition.group(1), "filename": disposition.group(2), "content": content.rstrip(b"\r\n")})
+    return fields
 
 def parse_resume(text, filename):
     compact = re.sub(r"\s+", " ", text)
@@ -72,13 +93,13 @@ class Handler(BaseHTTPRequestHandler):
                 questions = [("01 / 用户洞察", "请分享一个你通过用户反馈推动产品或方案改进的经历。", ["当时的具体情境是什么？", "你负责哪一部分？", "最终用什么指标证明结果？"]), ("02 / 数据分析", "在一个熟悉的项目中，你如何使用数据发现问题并做出判断？", ["你选择了哪些数据？", "数据与直觉冲突时如何处理？", "结论如何影响决策？"]), ("03 / 产品思维", "如果让你优化一个校园二手交易平台，你会从哪里开始？", ["如何定义核心用户？", "第一步验证什么假设？", "资源有限时会放弃什么？"])]
                 return reply(self, {"count": len(questions), "questions": [{"dimension": a, "question": b, "followups": c} for a, b, c in questions]})
             if path != "/api/resumes/upload": return reply(self, {"error": "Not found"}, 404)
-            form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": self.headers.get("Content-Type", "")})
-            items = form["files"] if "files" in form else []; items = items if isinstance(items, list) else [items]; results = []
+            items = [item for item in parse_multipart(self) if item["name"] == "files"]
+            results = []
             for item in items:
-                filename = Path(item.filename or "").name
+                filename = Path(item["filename"] or "").name
                 if Path(filename).suffix.lower() not in ALLOWED: raise ValueError("Unsupported file type")
-                saved = UPLOADS / f"{uuid.uuid4().hex}_{filename}"; item.file.seek(0)
-                with saved.open("wb") as output: shutil.copyfileobj(item.file, output)
+                saved = UPLOADS / f"{uuid.uuid4().hex}_{filename}"
+                saved.write_bytes(item["content"])
                 try: results.append(parse_resume(extract_text(saved), filename))
                 finally: saved.unlink(missing_ok=True)
             return reply(self, {"count": len(results), "candidates": results})
